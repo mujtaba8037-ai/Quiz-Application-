@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Quiz Application</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#10b981',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- html2pdf.js for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <style>
+        /* Custom styles for progress bar segments */
+        .segment { height: 8px; border-radius: 4px; flex: 1; transition: all 0.3s ease; }
+        .segment.active { transform: scaleY(1.5); }
+        
+        /* Hide scrollbar for cleaner look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 min-h-screen flex items-center justify-center p-4 transition-colors duration-300">
+
+    <!-- Theme Toggle Button -->
+    <button id="theme-toggle" class="absolute top-4 right-4 p-2 rounded-full bg-white dark:bg-gray-800 shadow-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700">
+        <svg id="theme-icon-light" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+        <svg id="theme-icon-dark" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+    </button>
+
+    <!-- Main Container -->
+    <div class="w-full max-w-2xl">
+        
+        <!-- Quiz Section -->
+        <div id="quiz-container" class="bg-gray-900 text-white rounded-xl shadow-2xl p-6 md:p-8 border border-gray-700">
+            
+            <!-- Header: Progress & Timer -->
+            <div class="flex justify-between items-center mb-4">
+                <span id="question-tracker" class="text-sm font-semibold text-gray-400">Question 1 / 5</span>
+                <span id="timer" class="text-sm font-bold text-red-500">Time Left: 10s</span>
+            </div>
+
+            <!-- Multi-colored Segmented Progress Bar -->
+            <div class="flex gap-1 mb-8" id="progress-bar">
+                <!-- Segments will be injected by JS -->
+            </div>
+
+            <!-- Question Text -->
+            <h2 id="question-text" class="text-xl md:text-2xl font-bold mb-6 leading-tight">Question goes here?</h2>
+
+            <!-- Options Container -->
+            <div id="options-container" class="space-y-3 mb-8">
+                <!-- Options will be injected by JS -->
+            </div>
+
+            <!-- Next/Submit Button -->
+            <div class="flex justify-end">
+                <button id="next-btn" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-6 rounded-lg transition-colors hidden">
+                    Next →
+                </button>
+            </div>
+        </div>
+
+        <!-- Result Section (Hidden initially, used for PDF generation) -->
+        <div id="result-container" class="hidden bg-white text-black p-8 rounded-lg shadow-2xl max-w-4xl mx-auto mt-8">
+            <h1 class="text-2xl font-bold mb-2">Quiz Result</h1>
+            <p id="result-score" class="text-lg font-semibold mb-6">Score: 0 / 5</p>
+            
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-gray-200 border-b-2 border-gray-400">
+                        <th class="p-2 border border-gray-300 text-sm">#</th>
+                        <th class="p-2 border border-gray-300 text-sm">Question</th>
+                        <th class="p-2 border border-gray-300 text-sm">Your Answer</th>
+                        <th class="p-2 border border-gray-300 text-sm">Correct Answer</th>
+                        <th class="p-2 border border-gray-300 text-sm">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="result-table-body">
+                    <!-- Table rows injected by JS -->
+                </tbody>
+            </table>
+            
+            <button id="download-pdf" class="mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg w-full transition-colors">
+                Download Results as PDF
+            </button>
+        </div>
+        
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // 1. Quiz Data (Using questions from the provided images + 1 extra to make 5)
+        const quizData = [
+            {
+                question: "Which method selects element by ID in JavaScript?",
+                options: ["getElementById()", "querySelector()", "getElementsByClassName()", "getElement()"],
+                correct: "getElementById()"
+            },
+            {
+                question: "Which HTML attribute is used to link CSS?",
+                options: ["src", "href", "rel", "link"],
+                correct: "href"
+            },
+            {
+                question: "Which method removes the last element of an array?",
+                options: ["pop()", "push()", "shift()", "unshift()"],
+                correct: "pop()"
+            },
+            {
+                question: "Which JS array method adds element to end?",
+                options: ["pop()", "push()", "shift()", "unshift()"],
+                correct: "push()"
+            },
+            {
+                question: "Which JS keyword declares a block-scoped variable?",
+                options: ["const", "let", "var", "all of these"],
+                correct: "let"
+            }
+        ];
+
+        // State Variables
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let timerInterval;
+        let timeLeft = 10;
+        let userAnswers = []; // Store user's choices for the PDF report
+        let questions = []; // Randomized questions
+
+        // DOM Elements
+        const questionTracker = document.getElementById('question-tracker');
+        const timerEl = document.getElementById('timer');
+        const questionText = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const nextBtn = document.getElementById('next-btn');
+        const progressBar = document.getElementById('progress-bar');
+        const quizContainer = document.getElementById('quiz-container');
+        const resultContainer = document.getElementById('result-container');
+        const resultScore = document.getElementById('result-score');
+        const resultTableBody = document.getElementById('result-table-body');
+        const downloadPdfBtn = document.getElementById('download-pdf');
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIconLight = document.getElementById('theme-icon-light');
+        const themeIconDark = document.getElementById('theme-icon-dark');
+
+        // Colors for the segmented progress bar
+        const segmentColors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500', 'bg-purple-500'];
+
+        // 2. Initialize Quiz
+        function initQuiz() {
+            // Randomize questions (optional, but required by prompt: "at least five randomized questions")
+            questions = [...quizData].sort(() => Math.random() - 0.5);
+            
+            currentQuestionIndex = 0;
+            score = 0;
+            userAnswers = [];
+            
+            // Build Progress Bar Segments
+            progressBar.innerHTML = '';
+            questions.forEach((_, index) => {
+                const segment = document.createElement('div');
+                segment.classList.add('segment', 'bg-gray-700', 'dark:bg-gray-600');
+                segment.id = `segment-${index}`;
+                progressBar.appendChild(segment);
+            });
+
+            quizContainer.classList.remove('hidden');
+            resultContainer.classList.add('hidden');
+            loadQuestion();
+        }
+
+        // 3. Load Question
+        function loadQuestion() {
+            if (currentQuestionIndex >= questions.length) {
+                showResults();
+                return;
+            }
+
+            resetState();
+            const currentQ = questions[currentQuestionIndex];
+            
+            questionTracker.textContent = `Question ${currentQuestionIndex + 1} / ${questions.length}`;
+            questionText.textContent = currentQ.question;
+
+            // Create Options
+            currentQ.options.forEach(option => {
+                const button = document.createElement('button');
+                button.textContent = option;
+                button.classList.add('w-full', 'text-left', 'p-4', 'rounded-lg', 'bg-gray-800', 'hover:bg-gray-700', 'transition-colors', 'border', 'border-gray-700', 'font-medium');
+                button.onclick = () => selectOption(button, option, currentQ.correct);
+                optionsContainer.appendChild(button);
+            });
+
+            // Highlight current segment slightly
+            document.getElementById(`segment-${currentQuestionIndex}`).classList.add('active');
+
+            startTimer();
+        }
+
+        // 4. Handle Option Selection
+        function selectOption(selectedBtn, selectedOption, correctOption) {
+            clearInterval(timerInterval); // Stop timer
+            const buttons = optionsContainer.querySelectorAll('button');
+            
+            // Disable all buttons after selection
+            buttons.forEach(btn => {
+                btn.disabled = true;
+                btn.classList.remove('hover:bg-gray-700');
+            });
+
+            // Highlight correct and incorrect
+            if (selectedOption === correctOption) {
+                selectedBtn.classList.replace('bg-gray-800', 'bg-green-600');
+                selectedBtn.classList.replace('border-gray-700', 'border-green-500');
+                score++;
+            } else {
+                selectedBtn.classList.replace('bg-gray-800', 'bg-red-600');
+                selectedBtn.classList.replace('border-gray-700', 'border-red-500');
+                
+                // Highlight the correct answer
+                buttons.forEach(btn => {
+                    if (btn.textContent === correctOption) {
+                        btn.classList.replace('bg-gray-800', 'bg-green-600');
+                        btn.classList.replace('border-gray-700', 'border-green-500');
+                    }
+                });
+            }
+
+            // Store user answer for PDF
+            userAnswers.push({
+                question: questions[currentQuestionIndex].question,
+                userAnswer: selectedOption,
+                correctAnswer: correctOption,
+                isCorrect: selectedOption === correctOption
+            });
+
+            // Update Progress Bar Segment Color
+            const currentSegment = document.getElementById(`segment-${currentQuestionIndex}`);
+            currentSegment.className = `segment ${segmentColors[currentQuestionIndex % segmentColors.length]} active`;
+
+            // Show Next Button
+            nextBtn.classList.remove('hidden');
+        }
+
+        // 5. Next Button Logic
+        nextBtn.onclick = () => {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < questions.length) {
+                loadQuestion();
+            } else {
+                showResults();
+            }
+        };
+
+        // 6. Timer Logic
+        function startTimer() {
+            timeLeft = 10;
+            timerEl.textContent = `Time Left: ${timeLeft}s`;
+            timerEl.classList.remove('text-red-500');
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerEl.textContent = `Time Left: ${timeLeft}s`;
+                
+                if (timeLeft <= 3) {
+                    timerEl.classList.add('text-red-500');
+                }
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    timeOut(); // Auto-advance
+                }
+            }, 1000);
+        }
+
+        function timeOut() {
+            const buttons = optionsContainer.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+            
+            // Highlight the correct answer
+            const correctOption = questions[currentQuestionIndex].correct;
+            buttons.forEach(btn => {
+                if (btn.textContent === correctOption) {
+                    btn.classList.replace('bg-gray-800', 'bg-green-600');
+                }
+            });
+
+            // Record as incorrect/unanswered
+            userAnswers.push({
+                question: questions[currentQuestionIndex].question,
+                userAnswer: "Not Answered (Timeout)",
+                correctAnswer: correctOption,
+                isCorrect: false
+            });
+
+            // Update Progress Bar Segment Color
+            document.getElementById(`segment-${currentQuestionIndex}`).className = `segment bg-gray-500 active`;
+
+            nextBtn.classList.remove('hidden');
+        }
+
+        function resetState() {
+            nextBtn.classList.add('hidden');
+            optionsContainer.innerHTML = '';
+            clearInterval(timerInterval);
+        }
+
+        // 7. Show Results & Generate Table
+        function showResults() {
+            quizContainer.classList.add('hidden');
+            resultContainer.classList.remove('hidden');
+            resultScore.textContent = `Score: ${score} / ${questions.length}`;
+            
+            resultTableBody.innerHTML = '';
+            
+            userAnswers.forEach((ans, index) => {
+                const row = document.createElement('tr');
+                row.className = "border-b border-gray-200";
+                
+                const statusColor = ans.isCorrect ? "bg-green-600 text-white" : "bg-red-600 text-white";
+                const statusText = ans.isCorrect ? "Correct" : "Incorrect";
+
+                row.innerHTML = `
+                    <td class="p-2 border border-gray-300 text-sm">${index + 1}</td>
+                    <td class="p-2 border border-gray-300 text-sm">${ans.question}</td>
+                    <td class="p-2 border border-gray-300 text-sm">${ans.userAnswer}</td>
+                    <td class="p-2 border border-gray-300 text-sm">${ans.correctAnswer}</td>
+                    <td class="p-2 border border-gray-300 text-sm font-bold ${statusColor}">${statusText}</td>
+                `;
+                resultTableBody.appendChild(row);
+            });
+        }
+
+        // 8. Download PDF Logic
+        downloadPdfBtn.onclick = () => {
+            // Temporarily switch to light mode for PDF if in dark mode for better printing
+            const isDark = document.documentElement.classList.contains('dark');
+            if (isDark) document.documentElement.classList.remove('dark');
+            
+            const element = document.getElementById('result-container');
+            const opt = {
+                margin:       0.5,
+                filename:     'Quiz_Result.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2 },
+                jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            // Hide the download button in the PDF
+            downloadPdfBtn.style.display = 'none';
+
+            // Generate PDF
+            html2pdf().set(opt).from(element).save().then(() => {
+                // Restore UI state
+                downloadPdfBtn.style.display = 'block';
+                if (isDark) document.documentElement.classList.add('dark');
+            });
+        };
+
+        // 9. Dark/Light Mode Toggle
+        themeToggle.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+            themeIconLight.classList.toggle('hidden');
+            themeIconDark.classList.toggle('hidden');
+        });
+
+        // Start the app
+        initQuiz();
+    </script>
+</body>
+</html>
